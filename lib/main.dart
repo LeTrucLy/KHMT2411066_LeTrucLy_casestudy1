@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'transaction_screen.dart';
+import 'dashboard_screen.dart';
 
 void main() {
   runApp(const ExpenseManagerApp());
@@ -88,7 +89,12 @@ class WelcomeScreen extends StatelessWidget {
                 height: 54,
                 child: ElevatedButton(
                   onPressed: () {
-                    openTransaction(context, false);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DashboardScreen(),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1967C3),
@@ -99,7 +105,7 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ),
                   child: const Text(
-                    'Thêm giao dịch',
+                    'Bắt đầu',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
