@@ -2,10 +2,25 @@
 import 'package:flutter/material.dart';
 import 'transaction_screen.dart';
 import 'dashboard_screen.dart';
+import 'database/database_helper.dart';
 
-void main() {
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final db = await DatabaseHelper.instance.database;
+
+  debugPrint('SQLite kết nối thành công!');
+
+  final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'"
+  );
+
+  debugPrint('Danh sách bảng: $tables');
+
   runApp(const ExpenseManagerApp());
 }
+
 
 class ExpenseManagerApp extends StatelessWidget {
   const ExpenseManagerApp({super.key});
