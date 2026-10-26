@@ -1,4 +1,3 @@
-
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -6,22 +5,15 @@ class DatabaseHelper {
   DatabaseHelper._();
 
   static final DatabaseHelper instance = DatabaseHelper._();
-
   Database? _database;
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _openDatabase();
-    return _database!;
-  }
+  Future<Database> get database async => _database ??= await _open();
 
-  Future<Database> _openDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'expense_manager.db');
-
+  Future<Database> _open() async {
+    final dbPath = join(await getDatabasesPath(), 'expense_manager.db');
     return openDatabase(
-      path,
-      version: 1,
+      dbPath,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -30,112 +22,175 @@ class DatabaseHelper {
           CREATE TABLE categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            type TEXT NOT NULL
+            type TEXT NOT NULL,
+            icon TEXT NOT NULL DEFAULT ''
           )
         ''');
-
         await db.execute('''
           CREATE TABLE transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category_id INTEGER NOT NULL,
+            amount INTEGER NOT NULL CHECK(amount > 0),
             type TEXT NOT NULL,
-            amount REAL NOT NULL CHECK(amount > 0),
             date TEXT NOT NULL,
-            note TEXT,
-            FOREIGN KEY (category_id)
-              REFERENCES categories(id)
+            note TEXT DEFAULT '',
+            FOREIGN KEY (category_id) REFERENCES categories(id)
           )
         ''');
-
-        final categories = [
-          {'name': 'Ăn uống', 'type': 'expense'},
-          {'name': 'Mua sắm', 'type': 'expense'},
-          {'name': 'Di chuyển', 'type': 'expense'},
-          {'name': 'Giải trí', 'type': 'expense'},
-          {'name': 'Khác', 'type': 'expense'},
-          {'name': 'Lương', 'type': 'income'},
-          {'name': 'Thưởng', 'type': 'income'},
-          {'name': 'Khác', 'type': 'income'},
-        ];
-
-        for (final category in categories) {
-          await db.insert('categories', category);
-        }
       },
-    );
+
+    // Thêm đoạn này để nâng cấp database
+    onUpgrade: (db, oldVersion, newVersion) async {
+      if (oldVersion < 2) {
+        final columns = await db.rawQuery(
+          'PRAGMA table_info(categories)',
+        );
+
+        final hasIcon = columns.any(
+          (column) => column['name'] == 'icon',
+        );
+
+        if (!hasIcon) {
+          await db.execute(
+            "ALTER TABLE categories ADD COLUMN icon TEXT NOT NULL DEFAULT ''",
+          );
+        }
+      }
+    },
+
+  );
+}
+
+  Future<Map<String, int>> getSummary() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'Thu nhập' THEN amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN type = 'Chi tiêu' THEN amount ELSE 0 END), 0) AS expense
+      FROM transactions
+    ''');
+    final income = (rows.first['income'] as num).toInt();
+    final expense = (rows.first['expense'] as num).toInt();
+    return {
+      'income': income,
+      'expense': expense,
+      'balance': income - expense,
+    };
   }
 
-  // Lấy danh sách danh mục
-  Future<List<Map<String, dynamic>>> getCategories({
-    String? type,
-  }) async {
+  Future<void> ensureCategories() async {
     final db = await database;
+    const defaults = <Map<String, String>>[
+      {'name': 'Ăn uống', 'type': 'Chi tiêu', 'icon': 'restaurant'},
+      {'name': 'Mua sắm', 'type': 'Chi tiêu', 'icon': 'shopping_bag'},
+      {'name': 'Di chuyển', 'type': 'Chi tiêu', 'icon': 'directions_car'},
+      {'name': 'Giải trí', 'type': 'Chi tiêu', 'icon': 'movie'},
+      {'name': 'Học phí', 'type': 'Chi tiêu', 'icon': 'school'},
+      {'name': 'Khác', 'type': 'Chi tiêu', 'icon': 'category'},
+      {'name': 'Lương', 'type': 'Thu nhập', 'icon': 'payments'},
+      {'name': 'Thưởng', 'type': 'Thu nhập', 'icon': 'paid'},
+      {'name': 'Khác', 'type': 'Thu nhập', 'icon': 'category'},
+    ];
+    for (final item in defaults) {
+      final found = await db.query(
+        'categories',
+        columns: ['id'],
+        where: 'name = ? AND type = ?',
+        whereArgs: [item['name'], item['type']],
+        limit: 1,
+      );
+      if (found.isEmpty) {
+        await db.insert('categories', item);
+      }
+    }
+  }
 
+  Future<List<Map<String, Object?>>> getCategories(String type) async {
+    final db = await database;
     return db.query(
       'categories',
-      where: type == null ? null : 'type = ?',
-      whereArgs: type == null ? null : [type],
+      where: 'type = ?',
+      whereArgs: [type],
       orderBy: 'id ASC',
     );
   }
 
-  // Thêm giao dịch
-  Future<int> insertTransaction({
-    required int categoryId,
-    required String type,
-    required double amount,
-    required DateTime date,
-    String note = '',
-  }) async {
+  Future<List<Map<String, Object?>>> getTransactions() async {
     final db = await database;
-
-    return db.insert('transactions', {
-      'category_id': categoryId,
-      'type': type,
-      'amount': amount,
-      'date': date.toIso8601String(),
-      'note': note,
-    });
-  }
-
-  // Lấy danh sách giao dịch
-  Future<List<Map<String, dynamic>>> getTransactions() async {
-    final db = await database;
-
     return db.rawQuery('''
-      SELECT
-        t.id,
-        t.category_id,
-        t.type,
-        t.amount,
-        t.date,
-        t.note,
-        c.name AS category_name
+      SELECT t.*, c.name AS category_name
       FROM transactions t
-      INNER JOIN categories c
-        ON t.category_id = c.id
+      LEFT JOIN categories c ON c.id = t.category_id
       ORDER BY t.date DESC, t.id DESC
     ''');
   }
 
-  // Sửa giao dịch
-  Future<int> updateTransaction({
-    required int id,
+  Future<Map<String, Object?>?> getTransactionById(int id) async {
+    final db = await database;
+    final rows = await db.query(
+      'transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  String _date(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _checkCategory(Database db, int id, String type) async {
+    final rows = await db.query(
+      'categories',
+      columns: ['id'],
+      where: 'id = ? AND type = ?',
+      whereArgs: [id, type],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw ArgumentError('Danh mục không phù hợp với loại giao dịch');
+    }
+  }
+
+  Future<int> insertTransaction({
     required int categoryId,
+    required int amount,
     required String type,
-    required double amount,
     required DateTime date,
     String note = '',
   }) async {
+    if (amount <= 0) throw ArgumentError('Số tiền phải lớn hơn 0');
     final db = await database;
+    await _checkCategory(db, categoryId, type);
+    return db.insert('transactions', {
+      'category_id': categoryId,
+      'amount': amount,
+      'type': type,
+      'date': _date(date),
+      'note': note,
+    });
+  }
 
+  Future<int> updateTransaction({
+    required int id,
+    required int categoryId,
+    required int amount,
+    required String type,
+    required DateTime date,
+    String note = '',
+  }) async {
+    if (amount <= 0) throw ArgumentError('Số tiền phải lớn hơn 0');
+    final db = await database;
+    await _checkCategory(db, categoryId, type);
     return db.update(
       'transactions',
       {
         'category_id': categoryId,
-        'type': type,
         'amount': amount,
-        'date': date.toIso8601String(),
+        'type': type,
+        'date': _date(date),
         'note': note,
       },
       where: 'id = ?',
@@ -143,37 +198,23 @@ class DatabaseHelper {
     );
   }
 
-  // Xóa giao dịch
   Future<int> deleteTransaction(int id) async {
     final db = await database;
-
-    return db.delete(
-      'transactions',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Tính tổng thu nhập hoặc chi tiêu
-  Future<double> getTotalByType(String type) async {
+  Future<int> _total(String type) async {
     final db = await database;
-
-    final result = await db.rawQuery(
-      '''
-      SELECT SUM(amount) AS total
-      FROM transactions
-      WHERE type = ?
-      ''',
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) AS total '
+      'FROM transactions WHERE type = ?',
       [type],
     );
-
-    return (result.first['total'] as num?)?.toDouble() ?? 0;
+    return (rows.first['total'] as num).toInt();
   }
 
-  Future<void> close() async {
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
-    }
-  }
+  Future<int> getTotalIncome() => _total('Thu nhập');
+  Future<int> getTotalExpense() => _total('Chi tiêu');
+  Future<int> getBalance() async =>
+      await getTotalIncome() - await getTotalExpense();
 }
