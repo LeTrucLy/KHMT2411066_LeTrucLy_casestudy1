@@ -1,4 +1,6 @@
+
 import 'package:flutter/material.dart';
+import 'transaction_screen.dart';
 
 void main() {
   runApp(const ExpenseManagerApp());
@@ -27,6 +29,17 @@ class ExpenseManagerApp extends StatelessWidget {
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
+  void openTransaction(BuildContext context, bool isEdit) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TransactionScreen(
+          isEdit: isEdit,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,8 +53,11 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(flex: 4),
+
               const WalletLogo(),
+
               const SizedBox(height: 24),
+
               const Text(
                 'Expense Manager',
                 textAlign: TextAlign.center,
@@ -51,7 +67,9 @@ class WelcomeScreen extends StatelessWidget {
                   color: Color(0xFF172842),
                 ),
               ),
+
               const SizedBox(height: 20),
+
               const Text(
                 'Quản lý chi tiêu cá nhân\n'
                     'đơn giản và hiệu quả',
@@ -62,19 +80,15 @@ class WelcomeScreen extends StatelessWidget {
                   color: Color(0xFF8B9AB0),
                 ),
               ),
+
               const Spacer(flex: 5),
+
               SizedBox(
                 width: double.infinity,
                 height: 54,
                 child: ElevatedButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Chào mừng đến Expense Manager!',
-                        ),
-                      ),
-                    );
+                    openTransaction(context, false);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1967C3),
@@ -85,7 +99,35 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ),
                   child: const Text(
-                    'Bắt đầu',
+                    'Thêm giao dịch',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: OutlinedButton(
+                  onPressed: () {
+                    openTransaction(context, true);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1967C3),
+                    side: const BorderSide(
+                      color: Color(0xFF1967C3),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Sửa giao dịch',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
