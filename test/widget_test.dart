@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:khmt2411066_letrucly_casestudy1/main.dart';
+import '../lib/main.dart';
 
 void main() {
-  testWidgets('Ứng dụng khởi tạo thành công', (WidgetTester tester) async {
+  test('ExpenseManagerApp được khởi tạo', () {
     expect(const ExpenseManagerApp(), isNotNull);
   });
 }

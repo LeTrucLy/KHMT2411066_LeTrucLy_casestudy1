@@ -32,6 +32,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Future<void> _load() async {
     try {
+      await _db.ensureCategories();
       if (isEdit) {
         final data = await _db.getTransactionById(widget.transactionId!);
         if (data == null) throw StateError('Không tìm thấy giao dịch');
@@ -41,12 +42,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _noteController.text = (data['note'] as String?) ?? '';
         _date = DateTime.parse(data['date'] as String);
       }
-      await _db.ensureCategories();
-
       final categories = await _db.getCategories(_type);
-
-      debugPrint('LOAI GIAO DICH: $_type');
-      debugPrint('DANH SACH DANH MUC: $categories');
       if (!mounted) return;
       setState(() {
         _categories = categories;
@@ -205,7 +201,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             ]),
                             _label('Danh mục'),
                             DropdownButtonFormField<int>(
-                              initialValue: _categoryId,
+                              value: _categoryId,
                               decoration: _decoration(),
                               items: _categories.map((c) => DropdownMenuItem<int>(
                                 value: (c['id'] as num).toInt(),

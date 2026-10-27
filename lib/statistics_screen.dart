@@ -1,298 +1,123 @@
-
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
-import 'database/database_helper.dart';
+import 'app_ui.dart';
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({super.key});
-
+  final List<Map<String, Object?>> transactions;
+  const StatisticsScreen({super.key, required this.transactions});
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
-  String selectedPeriod = 'Tháng này';
-
-  final List<Color> chartColors = [
-    const Color(0xFFE90062),
-    const Color(0xFF6444F5),
-    const Color(0xFF0865F5),
-    const Color(0xFF08B69B),
-    const Color(0xFF8295CE),
-    const Color(0xFFFF9D94),
-    Colors.orange,
-    Colors.brown,
-  ];
-
-  late Future<List<Map<String, Object?>>> transactionsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  void _refresh() {
-    transactionsFuture = DatabaseHelper.instance.getTransactions();
-  }
-
-  String money(num value) {
-    return value.toInt().toString().replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (match) => '.',
-    );
-  }
-
-  bool isInPeriod(DateTime date) {
+  int _period = 0;
+  bool _income = false;
+  bool _withinPeriod(Map<String, Object?> t) {
+    final d = DateTime.tryParse(t['date']?.toString() ?? '');
+    if (d == null) return false;
     final now = DateTime.now();
-
-    if (selectedPeriod == 'Tháng này') {
-      return date.month == now.month && date.year == now.year;
+    if (_period == 0) return d.year == now.year && d.month == now.month;
+    if (_period == 1) {
+      final prev = DateTime(now.year, now.month - 1);
+      return d.year == prev.year && d.month == prev.month;
     }
-
-    if (selectedPeriod == 'Tháng trước') {
-      final previous = DateTime(now.year, now.month - 1);
-      return date.month == previous.month &&
-          date.year == previous.year;
-    }
-
-    return date.year == now.year;
+    return d.year == now.year;
   }
-
-  Widget periodButton(String title) {
-    final selected = selectedPeriod == title;
-
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: ElevatedButton(
-          onPressed: () {
-            setState(() => selectedPeriod = title);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-            selected ? const Color(0xFF1265F2) : Colors.white,
-            foregroundColor:
-            selected ? Colors.white : const Color(0xFF253653),
-            elevation: selected ? 2 : 0,
-            padding: const EdgeInsets.symmetric(
-              vertical: 14,
-              horizontal: 2,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
-      appBar: AppBar(
-        title: const Text(
-          'Thống kê',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF172B50),
-          ),
-        ),
-        centerTitle: false,
-        backgroundColor: const Color(0xFFF5F7FF),
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          setState(_refresh);
-          await transactionsFuture;
-        },
-        child: FutureBuilder<List<Map<String, Object?>>>(
-          future: transactionsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Lỗi tải dữ liệu: ${snapshot.error}'),
-              );
-            }
-
-            final transactions = snapshot.data ?? [];
-            final Map<String, double> totals = {};
-
-            for (final transaction in transactions) {
-              if (transaction['type'] != 'Chi tiêu') continue;
-
-              final date = DateTime.tryParse(
-                transaction['date'].toString(),
-              );
-
-              if (date == null || !isInPeriod(date)) continue;
-
-              final name =
-                  transaction['category_name']?.toString() ?? 'Khác';
-
-              final amount =
-              (transaction['amount'] as num).toDouble();
-
-              totals[name] = (totals[name] ?? 0) + amount;
-            }
-
-            final entries = totals.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value));
-
-            final total = entries.fold<double>(
-              0,
-                  (sum, item) => sum + item.value,
-            );
-
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Row(
-                  children: [
-                    periodButton('Tháng này'),
-                    periodButton('Tháng trước'),
-                    periodButton('Năm nay'),
-                  ],
-                ),
-
-                const SizedBox(height: 28),
-
-                // BIỂU ĐỒ TRÒN
-                SizedBox(
-                  height: 300,
-                  child: total == 0
-                      ? const Center(
-                    child: Text(
-                      'Chưa có dữ liệu chi tiêu',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      PieChart(
-                        PieChartData(
-                          startDegreeOffset: -90,
-                          centerSpaceRadius: 82,
-                          sectionsSpace: 2,
-                          sections: List.generate(
-                            entries.length,
-                                (index) {
-                              final item = entries[index];
-
-                              return PieChartSectionData(
-                                value: item.value,
-                                color: chartColors[
-                                index % chartColors.length],
-                                radius: 42,
-                                showTitle: false,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${money(total)} đ',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF172B50),
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Tổng chi tiêu',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 25),
-
-                // DANH SÁCH DANH MỤC
-                ...List.generate(entries.length, (index) {
-                  final item = entries[index];
-                  final percent = item.value / total * 100;
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 13,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 13,
-                          height: 13,
-                          decoration: BoxDecoration(
-                            color: chartColors[
-                            index % chartColors.length],
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            item.key,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${money(item.value)} đ',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF172B50),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 45,
-                          child: Text(
-                            '${percent.toStringAsFixed(0)}%',
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            );
-          },
-        ),
-      ),
-    );
+    final amounts = <String, int>{};
+    for (final t in widget.transactions) {
+      if (!_withinPeriod(t) || t['type'] != (_income ? 'Thu nhập' : 'Chi tiêu')) continue;
+      final category = (t['category_name'] as String?) ?? 'Khác';
+      amounts[category] = (amounts[category] ?? 0) + (t['amount'] as num).toInt();
+    }
+    final entries = amounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final total = entries.fold<int>(0, (sum, e) => sum + e.value);
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 17, 16, 100), children: [
+      Row(children: [
+        for (var i = 0; i < 3; i++) Expanded(child: Padding(
+          padding: const EdgeInsets.only(right: 5), child: SizedBox(height: 37, child: ElevatedButton(
+            onPressed: () => setState(() => _period = i),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _period == i ? appBlue : Colors.white,
+              foregroundColor: _period == i ? Colors.white : appInk,
+              elevation: _period == i ? 2 : 0,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text(['Tháng này', 'Tháng trước', 'Năm nay'][i],
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          )))),
+      ]),
+      const SizedBox(height: 22),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        ChoiceChip(label: const Text('Chi tiêu'), selected: !_income, showCheckmark: false,
+          onSelected: (_) => setState(() => _income = false)),
+        const SizedBox(width: 10),
+        ChoiceChip(label: const Text('Thu nhập'), selected: _income, showCheckmark: false,
+          onSelected: (_) => setState(() => _income = true)),
+      ]),
+      const SizedBox(height: 13),
+      Center(child: SizedBox(width: 245, height: 245, child: Stack(alignment: Alignment.center, children: [
+        CustomPaint(size: const Size(230, 230), painter: _DonutPainter(
+          values: entries.map((e) => e.value.toDouble()).toList())),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          FittedBox(child: Text(money(total), style: const TextStyle(fontSize: 21,
+            fontWeight: FontWeight.w800, color: appInk))),
+          const SizedBox(height: 5),
+          Text(_income ? 'Tổng thu nhập' : 'Tổng chi tiêu',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF9BA6B6))),
+        ]),
+      ]))),
+      const SizedBox(height: 27),
+      if (entries.isEmpty)
+        const Center(child: Padding(padding: EdgeInsets.all(25),
+          child: Text('Chưa có dữ liệu trong khoảng thời gian này',
+            style: TextStyle(color: Color(0xFF8792A5)))))
+      else
+        Container(decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(14)), child: Column(children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15), child: Row(children: [
+              CircleAvatar(radius: 5, backgroundColor: chartColors[i % chartColors.length]),
+              const SizedBox(width: 10),
+              Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w600, color: appInk))),
+              Text(money(entries[i].value), style: const TextStyle(fontSize: 12,
+                fontWeight: FontWeight.bold, color: appInk)),
+              const SizedBox(width: 15),
+              SizedBox(width: 42, child: Text('${(entries[i].value * 100 / total).round()}%',
+                textAlign: TextAlign.right, style: const TextStyle(fontSize: 11,
+                  color: Color(0xFF8C98AB)))),
+            ])),
+            if (i != entries.length - 1) const Divider(height: 1, indent: 14, endIndent: 14),
+          ],
+        ])),
+    ]);
   }
+}
+
+class _DonutPainter extends CustomPainter {
+  final List<double> values;
+  _DonutPainter({required this.values});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromCircle(center: Offset(size.width / 2, size.height / 2),
+      radius: math.min(size.width, size.height) / 2 - 14);
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 30;
+    final total = values.fold<double>(0, (a, b) => a + b);
+    if (total <= 0) {
+      paint.color = const Color(0xFFE3EAF5);
+      canvas.drawArc(rect, 0, math.pi * 2, false, paint);
+      return;
+    }
+    var start = -math.pi / 2;
+    for (var i = 0; i < values.length; i++) {
+      final sweep = values[i] / total * math.pi * 2;
+      paint.color = chartColors[i % chartColors.length];
+      canvas.drawArc(rect, start + 0.009, math.max(0.0, sweep - 0.018), false, paint);
+      start += sweep;
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _DonutPainter old) => true;
 }
