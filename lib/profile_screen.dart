@@ -22,29 +22,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final budget = await db.getSetting('monthly_budget') ?? '';
     if (mounted) setState(() { _name = name; _budget = budget; });
   }
-  Future<void> _editSetting({required String title, required String key,
-    required String initial, bool numeric = false}) async {
-    final controller = TextEditingController(text: initial);
-    final value = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: TextField(controller: controller,
-        keyboardType: numeric ? TextInputType.number : TextInputType.text,
-        decoration: InputDecoration(hintText: title)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
-        TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Lưu')),
-      ],
-    ));
-    controller.dispose();
+
+  Future<void> _editSetting({
+    required String title,
+    required String key,
+    required String initial,
+    bool numeric = false,
+  }) async {
+    String inputValue = initial;
+
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextFormField(
+          initialValue: initial,
+          keyboardType:
+          numeric ? TextInputType.number : TextInputType.text,
+          decoration: InputDecoration(hintText: title),
+          onChanged: (text) {
+            inputValue = text;
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx, inputValue.trim());
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+
     if (value == null || !mounted) return;
-    if (numeric && (int.tryParse(value) == null || int.parse(value) < 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập ngân sách hợp lệ')));
+
+    if (numeric &&
+        (int.tryParse(value) == null || int.parse(value) < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nhập ngân sách hợp lệ'),
+        ),
+      );
       return;
     }
+
     await db.setSetting(key, value);
+
+    if (!mounted) return;
+
     await _load();
+
+    if (!mounted) return;
+
     widget.onChanged();
   }
+
   Future<void> _categories() async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagerScreen()));
     widget.onChanged();
